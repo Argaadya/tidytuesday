@@ -1,0 +1,62 @@
+---
+title: "UFO sighting"
+author: "Arga"
+date: "6/28/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggrepel)
+library(ggridges)
+library(maps)
+library(cowplot)
+library(lubridate)
+setwd("D:/R/datasets/")
+```
+
+```{r data preparation,include=FALSE}
+ufo <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-25/ufo_sightings.csv")
+world <- map_data("world")
+data <- ufo %>% filter(is.na(date_time)==F & is.na(latitude)==F & is.na(longitude)==F)
+data$date_documented <- mdy(as.character(data$date_documented))
+data$date_time <- mdy_hm(as.character(data$date_time))
+data <- data %>% dplyr::mutate(year_sighted = year(data$date_time),
+                               month_sighted = month(data$date_time),
+                               hour_sighted = hour(data$date_time),
+                               year_documented = year(data$date_documented),
+                               year_span = year_documented - year_sighted,
+                               befo = case_when(year_sighted < 1947 ~ "Before 1947",
+                                year_sighted > 1946 & year_sighted < 1990 ~ "1947-1990",
+                                year_sighted > 1989 ~ "After 1990"))
+data$befo <- factor(data$befo,levels = c("Before 1947","1947-1990","After 1990"))
+
+setwd("D:/R/tidytuesday/UFO/")
+```
+
+# Global UFO Sighting
+
+```{r global,echo=FALSE}
+ggplot(world)+
+  geom_polygon(mapping = aes(x=long,y=lat,group=group),fill="#1D2024", color="white")+
+  geom_point(data = data, aes(x=longitude,y=latitude, color=befo),alpha=1/2)+
+  scale_color_manual(values = c("blue","red","yellow"))+
+  geom_point(data=data %>% filter(befo=="Before 1947"),
+             aes(x=longitude,y=latitude),size=3,color="blue",alpha=1/2)+
+  theme_ridges()+
+  theme(panel.grid = element_blank(),
+        panel.background = element_rect(fill = "lightgray",colour = "lightgray"))+
+  labs(title="UFO Sighting in US",
+       subtitle = "Most UFO sighting took place in US. On 1947, the most famous UFO sighting happened, the Roswell Incident.
+Since then, the number of UFO sighting has skyrocketed.",
+       caption = "Data: NUFORC",
+       color = "Period",
+       x="Lattitude",y="Longitude")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
