@@ -87,7 +87,7 @@ df_map %>%
        caption = "github: Argaadya",
        title = "   Projected Transit Line Around the World",
        subtitle = "\nPresenting more than 50 countries and totals more than 11,000 km of urban rail built since the late 1990s.\n 
-       The number displayed shows the average cost of building traffic-infrastructure (in millions USD/km).\n"
+       The number displayed shows the average real cost of building traffic-infrastructure (in millions USD/km).\n"
        ) +
   theme_void() +
   theme(legend.position = "top",
