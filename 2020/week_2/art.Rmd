@@ -1,0 +1,263 @@
+---
+title: "Untitled"
+author: "Arga"
+date: "1/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(tidyverse)
+
+# Text Mining
+library(tidytext)
+library(textclean)
+library(hunspell)
+library(furrr)
+library(textmineR)
+
+# Visualization
+library(patchwork)
+library(ggwordcloud)
+library(cowplot)
+library(showtext)
+library(imager)
+library(ggpubr)
+```
+
+```{r}
+artwork <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-01-12/artwork.csv')
+artists <- readr::read_csv("https://github.com/tategallery/collection/raw/master/artist_data.csv")
+```
+
+# Topic Modeling
+
+## Text Cleansing
+
+```{r}
+df_clean <- artwork %>% 
+  filter(title != "[title not known]") %>% 
+  mutate(text_clean = title %>% 
+           tolower() %>% 
+           replace_contraction() %>% 
+           str_replace_all("[:punct:]", " ") %>% 
+           str_remove_all("[0-9]") %>% 
+           str_trim() %>% 
+           str_squish()
+         )
+```
+
+## Filter Word by Length
+
+```{r}
+document_length <- sapply(strsplit(df_clean$text_clean, " "), length)
+
+summary(document_length)
+```
+
+```{r}
+df_clean <- df_clean %>% 
+  select(id, text_clean) %>% 
+  filter(document_length > 3)
+```
+
+## Tokenization
+
+```{r}
+df_token <- df_clean %>% 
+  unnest_tokens(output = "word", input = text_clean) %>% 
+  filter(!word %in% stop_words$word)
+
+```
+
+## Stemming
+
+```{r}
+stem_hunspell <- function(term) {
+  # look up the term in the dictionary
+  stems <- hunspell_stem(term)[[1]]
+  
+  if (length(stems) == 0) { # if there are no stems, use the original term
+    stem <- term
+  } else { # if there are multiple stems, use the last one
+    stem <- stems[[length(stems)]]
+  }
+  return(stem)
+}
+
+plan(multisession, workers = 4) # number of cpu core
+
+df_token <- df_token %>%
+  mutate(word = future_map_chr(word, stem_hunspell))
+
+head(df_token)
+```
+
+```{r}
+frequent_token <- df_token %>% 
+  count(id, word) %>% 
+  count(word, name = "appearance") %>% 
+  arrange(desc(appearance))
+
+number_of_document <- n_distinct(df_token$id)
+
+# Get word that appear in at least 80% of all document
+top_word <- frequent_token %>% 
+  filter(appearance >= (number_of_document * 0.8)) %>% 
+  pull(word)
+
+# Get word that appear in less than 5 document
+low_word <- frequent_token %>% 
+  filter(appearance <= 5) %>% 
+  pull(word)
+
+custom_stop_word <- c(top_word, low_word)
+
+head(custom_stop_word, 30)
+```
+
+```{r}
+df_token <- df_token %>% 
+  filter(!(word %in% custom_stop_word)) %>% 
+  mutate(word = case_when(word == "riv" ~ "river", # change riv to river due to bad stemming
+                          word == "sou" ~ "south",
+                          word == "tow" ~ "tower",
+                          TRUE ~ word)
+         ) 
+
+token_char <- map_dbl(df_token$word, nchar)
+
+df_token <- df_token %>% 
+  filter(token_char > 2)
+```
+
+## Document-Term Matrix
+
+```{r}
+topic_dtm <- df_token %>% 
+  count(word, id) %>% 
+  cast_sparse(row = id,
+              column = word,
+              value = n)
+```
+
+```{r}
+dim(topic_dtm)
+```
+
+## Topic Model with LDA
+
+```{r eval=FALSE}
+set.seed(123)
+model_lda <- FitLdaModel(dtm = topic_dtm, 
+                        k = 8, # Number of Topics
+                        iterations = 5000, # sampling iterations
+                        burnin = 4000
+                        )
+```
+
+```{r}
+# Pre-Trained Topic Model
+model_lda <- read_rds("lda.rds")
+```
+
+# Visualization
+
+## Get Top Word
+
+```{r}
+word_topic <- GetTopTerms(model_lda$phi, 20) %>% 
+    as.data.frame() %>% 
+    setNames( 
+      paste("Topic", 1:(length(.)) )
+    )
+
+word_topic
+```
+
+
+```{r}
+df_word <- word_topic %>% 
+  mutate(id = rownames(.),
+         id = as.numeric(id)) %>% 
+  pivot_longer(-id, names_to = "topic", values_to = "term") %>% 
+  mutate(
+    topic = factor(topic, levels = paste("Topic", 1:(length(word_topic)))) %>% 
+      str_replace("Topic", "Theme")
+         ) 
+```
+
+## Get Font
+
+```{r}
+library(showtext)
+
+font_add_google("Redressed", "redressed")
+font_add_google("Acme", "acme")
+
+# set graphic engine
+showtext_auto()
+```
+
+## Middle Image
+
+```{r warning=F}
+img_file <- load.image("preview.png")
+
+p2 <- data.frame(x = 7,
+                 y = 8.5,
+                 label = "Artwork Theme\n of\nTate Art Museum"
+                 ) %>% 
+  ggplot(aes(x,y)) +
+  background_image(img_file) +
+  geom_text(aes(label = label), family = "redressed", size = 24, lineheight = 0.4) +
+  scale_x_continuous(limits = c(0, 10)) +
+  scale_y_continuous(limits = c(0, 10)) +
+  theme_void()
+
+theme_custom <- theme(
+  strip.background = element_rect(fill = "#1D2024", color = "transparent"),
+  strip.text = element_text(colour = "white", family = "redressed", size = 48, lineheight = 0.4),
+  # panel.border = element_rect(colour = "black", fill = "transparent"),
+  plot.background = element_rect(fill = "#1D2024")
+  )
+```
+
+## WordCloud
+
+```{r warning=F}
+p1 <- df_word %>% 
+  filter(topic %>% str_detect("1|2|3|4")) %>% 
+  ggplot(aes(label = term, size = rev(id), color = topic, alpha = rev(id))) +
+  geom_text_wordcloud(seed = 123, family = "acme", lineheight = 0.4) +
+  facet_wrap(~topic, scales = "free", ncol = 4) +
+  scale_alpha_continuous(range = c(0.4, 1)) +
+  scale_color_brewer(palette = "Pastel1") +
+  scale_size_continuous(range = c(4,14)) +
+  theme_void() +
+  theme_custom
+  
+p3 <- df_word %>% 
+  filter(topic %>% str_detect("5|6|7|8")) %>% 
+  ggplot(aes(label = term, size = rev(id), color = rev(topic), alpha = rev(id))) +
+  geom_text_wordcloud(seed = 123, family = "acme", lineheight = 0.4) +
+  facet_wrap(~topic, scales = "free", ncol = 4) +
+  scale_alpha_continuous(range = c(0.4, 1)) +
+  scale_size_continuous(range = c(4, 14)) +
+  theme_void() +
+  theme_custom
+```
+
+## Combine Plot
+
+```{r warning=F}
+plot_grid(p1, p2, p3,
+          ncol = 1,
+          rel_heights = c(0.25, 0.5, 0.25)
+          )
+
+ggsave("gallery.png", height = 10, width = 9)
+```
