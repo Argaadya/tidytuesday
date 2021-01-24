@@ -1,0 +1,155 @@
+---
+title: "Kenya Census"
+author: "Arga"
+date: "1/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library and Setup
+
+```{r message=FALSE}
+library(tidyverse)
+library(scales)
+library(rKenyaCensus)
+library(sf)
+library(showtext)
+library(ggpubr)
+```
+
+# Data
+
+## Map Border Data
+
+```{r}
+kenya_map <- read_rds("gadm36_KEN_1_sf.rds")
+
+head(kenya_map)
+```
+
+## Main Water Source by County
+
+```{r}
+df_long <- V4_T2.15 %>% 
+  filter(AdminArea == "County") %>% 
+  select(-c(AdminArea, SubCounty)) %>% 
+  pivot_longer(-c(County, ConventionalHouseholds), names_to = "source") %>% 
+  mutate(County = str_to_title(County) %>% 
+           str_replace("[/]","-"),
+         County = case_when(County == "Nairobi City" ~ "Nairobi",
+                            County == "Taita-Taveta" ~ "Taita Taveta",
+                            TRUE ~ County
+                            )
+         ) %>% 
+  filter(source != "NotStated")
+
+proper_name <- df_long %>% 
+  ungroup() %>% 
+  distinct(source) %>% 
+  mutate(source_name = c("Pond", "Dam/Lake", "Stream/River", "Protected Spring", "Unportected Spring",
+                         "Protected Well", "Unprotected Well", "Bore Hole/Tube Well", "Piped to Yard/Plot", 
+                         "Piped into Welling", "Bottled Water", "Rain/Harvested Water", "Water Vendor", "Public Tap/Stand Pipe"))
+
+df_water <- df_long %>% 
+  group_by(County) %>% 
+  arrange(-value) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  left_join(proper_name)
+
+```
+
+```{r}
+water_map <- kenya_map %>% 
+  left_join(df_water, by = c("NAME_1" ="County")) %>% 
+  st_as_sf()
+
+water_map
+```
+
+```{r}
+# Set Showtext Graphic Device
+showtext.auto()
+
+# Add new font from Google Font
+font_add_google(name = "Dosis", family = "dosis")
+font_add_google(name = "Bitter", family = "bitter")
+```
+
+```{r}
+p1 <- water_map %>% 
+  ggplot() +
+  geom_sf(aes(fill = source_name), lty = "dashed", color = "#D8D8D8") +
+  theme_void() +
+  labs(fill = NULL, 
+       title = "Kenya Dominant Water Source by County",
+       caption = "@Argaadya") +
+  scale_fill_manual(values = c("brown3", "dodgerblue3",  "green4", "orange", "magenta4", "lightyellow","skyblue4", "violet")) +
+  theme(legend.position = "right",
+        legend.key.width = unit(15, "mm"),
+        plot.title = element_text(family = "dosis", hjust = 0.5, size = 108),
+        legend.text = element_text(size = 50, lineheight = unit(0.1, "mm"), family = "bitter"),
+        text = element_text(colour = "white", size = 48, lineheight = unit(0.05, "mm")),
+        panel.background = element_rect(fill = "#1D2024", color = "transparent"),
+        plot.background = element_rect(fill = "#1D2024", color = "transparent"),
+        plot.margin = margin(r = -400, l = 0)
+        )
+```
+
+## Water Percentage
+
+```{r}
+water_percent <- df_long %>% 
+  left_join(proper_name) %>% 
+  group_by(source_name) %>% 
+  summarise(value = sum(value)) %>% 
+  arrange(-value) %>% 
+  mutate(value = value/sum(value))
+
+water_percent
+```
+
+```{r}
+df_percent <- water_percent %>% 
+  mutate(source_name = reorder(source_name, -value),
+         num_source = as.numeric(source_name),
+         real_value = value,
+         value = sqrt(value)
+         ) 
+
+p2 <- df_percent %>% 
+  ggplot(aes(fill = real_value)) +
+  geom_segment(aes(x = -value, xend = value, y = source_name, yend = source_name), color = "#32AAE8") +
+  geom_rect(aes(xmin = -value, xmax = value, ymin = num_source, ymax = num_source + 1), color = "skyblue4", linejoin = "round", size = 2.5 ) +
+  geom_text(aes(x =0, y = num_source + 0.5, label = percent(real_value, accuracy = 0.1)),
+            size = 32, family = "dosis") +
+  geom_text(aes(x = value + 0.1 * max(value), y = num_source + 0.5, label = source_name), 
+            hjust = 0, size = 15, color = "white", family = "bitter",
+            data = head(df_percent, 7)) +
+    geom_text(aes(x = -value - 0.1 * max(value), y = num_source + 0.5, label = source_name), 
+            hjust = 1, size = 15, color = "white", family = "bitter",
+            data = tail(df_percent, 7)) +
+  scale_fill_gradient(low = "#66CCFF", high = "skyblue4", guide = F ) +
+  scale_x_continuous(limits = c(max(-df_percent$value)-0.5, max(df_percent$value)+0.3)) +
+  labs(x = NULL, y = NULL, 
+       title = "Main Source of Water\nin Conventional Household\n") +
+  theme_void() +
+  theme(plot.title = element_text(family = "dosis", hjust = 0.5, size = 108),
+        text = element_text(colour = "white", size = 48, lineheight = unit(0.5, "mm")),
+        plot.background = element_rect(fill = "#1D2024", color = "transparent"),
+        panel.background = element_rect(fill = "#1D2024", color = "transparent")
+        )
+```
+
+# Combine Plot
+
+```{r message=FALSE, warning=FALSE}
+ggarrange(p2, p1, 
+          widths = c(1, 2))
+
+ggsave("watermap.png", width = 24, height = 12, bg = "#1D2024")
+```
+
