@@ -1,0 +1,231 @@
+---
+title: "Wealth and Income"
+author: "Arga"
+date: "2/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library and Setup
+
+```{r message=FALSE}
+library(tidyverse)
+library(scales)
+library(ggthemes)
+library(cowplot)
+```
+
+# Data
+
+```{r message=FALSE}
+lifetime_earn <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/lifetime_earn.csv')
+student_debt <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/student_debt.csv')
+retirement <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/retirement.csv')
+home_owner <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/home_owner.csv')
+race_wealth <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/race_wealth.csv')
+income_time <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/income_time.csv')
+income_limits <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/income_limits.csv')
+income_aggregate <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/income_aggregate.csv')
+income_distribution <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/income_distribution.csv')
+income_mean <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-09/income_mean.csv')
+```
+
+
+Title
+
+---
+
+Income Distribution | Plot 2
+
+---
+
+PLot 3 | Plot 4
+
+# Plot 1
+
+```{r}
+p1 <- income_distribution %>% 
+  rename(inc_dist = income_distribution) %>% 
+  mutate(income_bracket = str_replace_all(income_bracket, ",...", "k") %>% 
+           str_remove_all("\\$") %>% 
+           factor(levels = c("Under 15k", "15k to 24k", "25k to 34k", "35k to 49k", "50k to 74k",
+                             "75k to 99k", "100k to 149k", "150k to 199k", "200k and over"))
+         
+         ) %>% 
+  filter(year == max(year),
+         race != "All Races") %>% 
+  ggplot(aes(income_bracket, race, fill = inc_dist)) +
+  geom_tile(color = "#1D2024") +
+  # scale_x_discrete(labels = wrap_format(10)) +
+  scale_fill_binned(low = "firebrick4", high = "lightyellow",
+                    labels = number_format(suffix = "%", accuracy = 1)) +
+  scale_y_discrete(labels = wrap_format(15)) +
+  labs(fill = NULL,
+       title = paste0("\nIncome Distribution by Races in ", max(income_distribution$year)),
+       subtitle = "There are > 16% of Black people who has income less than 15K ",
+       y = NULL, x = "\nIncome Bracket\n") +
+  theme_pander() +
+  theme(legend.position = "top",
+        legend.key.width = unit(10, "mm"),
+        legend.key.height = unit(3, "mm"),
+        axis.text = element_text(family = "mono", color = "black"),
+        plot.margin = margin(r = 10, l = 10)) 
+  
+p1
+```
+
+# Plot 2
+
+```{r}
+final_share <- student_debt %>% 
+  filter(year == max(year)) %>% 
+  mutate(value = percent(loan_debt_pct))
+
+p2 <- student_debt %>% 
+  ggplot(aes(year, loan_debt_pct)) +
+  geom_line(aes(color = race),
+            size = 0.75) +
+  geom_text(aes(label = value, color = race), 
+            data = final_share,
+            family = "mono", size = 5,
+            hjust = 1,
+            nudge_y = 0.02,
+            show.legend = F
+            ) +
+  labs(color = NULL,
+       title = "Share of Families with Student Loan Debt \U001F393",
+       subtitle = "More families are having more student loan",
+       y = "Share of Families\n",
+       x = "\n") +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     limits = c(0, 0.45)) +
+  scale_x_continuous(breaks = seq(1990, 2020, 5), 
+                     expand = c(0,0)) +
+  scale_color_manual(values = c("firebrick4",  "green4", "dodgerblue4")) +
+  theme_pander() +
+  theme(legend.position = "top",
+        axis.text = element_text(family = "mono", color = "black"),
+        plot.margin = margin(r = 10, l = 10))
+
+p2
+```
+
+
+# Plot 3
+
+```{r}
+final_share <- home_owner %>% 
+  filter(year == max(year)) %>% 
+  mutate(value = percent(home_owner_pct),
+         home_owner_pct = home_owner_pct + c(0.05, -0.075, 0.05))
+
+p3 <- home_owner %>% 
+  ggplot(aes(year, home_owner_pct)) +
+  geom_line(aes(color = race),
+            size = 0.75) +
+  geom_text(aes(label = value, color = race), 
+            data = final_share,
+            family = "mono", size = 5,
+            hjust = 1,
+            nudge_y = 0.015,
+            show.legend = F
+            ) +
+  labs(color = NULL,
+       title = "Share of Home Ownership by Race/Ethnicity \U001F3D8",
+       subtitle = paste0("Home ownership does not change much since ", min(home_owner$year)),
+       y = "Share of Ownership\n",
+       x = "\n") +
+  scale_y_continuous(labels = percent_format(accuracy = 1), 
+                     limits = c(0, 0.8),
+                     position = "right") +
+  scale_x_continuous(breaks = seq(1960, 2020, 5),
+                     expand = c(0,0)) +
+  scale_color_manual(values = c("firebrick4",  "green4", "dodgerblue4")) +
+  theme_pander() +
+  theme(legend.position = "top",
+        axis.text = element_text(family = "mono", color = "black"),
+        plot.margin = margin(r = 10, l = 10))
+
+p3
+```
+
+
+# Plot 4
+
+```{r}
+final_share <- retirement %>% 
+  filter(year == max(year)) %>% 
+  mutate(value = dollar(retirement),
+         retirement = retirement + c(1e4, 1e4, -2.5*1e4))
+
+p4 <- retirement %>% 
+  ggplot(aes(year, retirement)) +
+  geom_line(aes(color = race),
+            size = 0.75) +
+  geom_text(aes(label = value, color = race), 
+            data = final_share,
+            family = "mono", size = 5,
+            hjust = 1,
+            nudge_y = 0.015,
+            show.legend = F
+            ) +
+  labs(color = NULL,
+       title = "Average Family Liquid Retirement Savings \U001F4B8",
+       subtitle = "Normalized to 2016 dollars.",
+       y = "Aveerage Savings\n",
+       x = NULL) +
+  scale_y_continuous(labels = dollar_format(accuracy = 1), 
+                     position = "right") +
+  scale_x_continuous(breaks = seq(1960, 2020, 5),
+                     expand = c(0,0)) +
+  scale_color_manual(values = c("firebrick4",  "green4", "dodgerblue4")) +
+  theme_pander() +
+  theme(legend.position = "top",
+        axis.text = element_text(family = "mono", color = "black"),
+        plot.margin = margin(r = 10, l = 10))
+
+p4
+```
+
+
+# Plot 5
+
+```{r}
+p5 <- income_mean %>% 
+  filter(race != "All Races") %>% 
+  filter(race %>% str_detect("Combination| Not", negate = T)) %>% 
+  mutate(race = str_remove(race, " Alone")) %>% 
+  filter(income_quintile %in% c("Lowest", "Middle", "Highest", "Top 5%")) %>% 
+  ggplot(aes(year, income_dollars, color = income_quintile)) +
+  geom_smooth(fill = "skyblue") +
+  scale_y_continuous(labels = dollar_format()) +
+  labs(title = "Mean Income Estimate Received by Race/Ethnicity",
+       y = "Mean Income", x = NULL,
+       color = "Income Quintile") +
+  facet_wrap(~race) +
+  theme_pander() +
+  theme(legend.position = "top",
+        plot.margin = margin(r = 10, l = 10))
+
+p5
+```
+
+
+
+
+# Join Plot
+
+```{r}
+plot_grid(p1, 
+          plot_grid(p2, p3), 
+          plot_grid(p4, p5), 
+          ncol = 1, rel_heights = c(1.5,1))
+
+ggsave("plot1.png", width = 20, height = 24)
+```
+
+
+
