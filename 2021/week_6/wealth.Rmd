@@ -224,7 +224,7 @@ plot_grid(p1,
           plot_grid(p4, p5), 
           ncol = 1, rel_heights = c(1.5,1))
 
-ggsave("plot1.png", width = 20, height = 24)
+ggsave("plot1.png", width = 12, height = 14)
 ```
 
 

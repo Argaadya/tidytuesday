@@ -1,0 +1,120 @@
+---
+title: "Untitled"
+author: "Arga"
+date: "3/25/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r message=FALSE}
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(ggthemes)
+library(ggalluvial)
+```
+
+# Data
+
+```{r message=FALSE}
+unvotes <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-23/unvotes.csv')
+roll_calls <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-23/roll_calls.csv')
+issues <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-23/issues.csv')
+```
+
+Join multiple dataset.
+
+```{r}
+roll_join <- unvotes %>% 
+  left_join(roll_calls) %>% 
+  mutate(year = year(date))
+
+df_complete <- issues %>% 
+  left_join(roll_join) 
+```
+
+# Plot 1
+
+```{r}
+majority_vote <- df_complete %>% 
+  count(year, rcid, vote) %>% 
+  group_by(year, rcid) %>% 
+  mutate(major = max(n)) %>% 
+  ungroup() %>% 
+  filter(n == major) %>% 
+  select(year, rcid, vote) %>% 
+  rename(major_vote = vote)
+
+indo_stance <- df_complete %>% 
+  filter(country == "Indonesia") %>% 
+  select(year, rcid, issue, vote) %>% 
+  left_join(majority_vote) %>% 
+  mutate(stance = case_when(vote == major_vote ~ "Majority",
+                               vote == "abstain" ~ "Abstain",
+                               TRUE ~ "Minority") %>% 
+           factor(levels = c("Majority", "Minority", "Abstain"))
+         
+         ) 
+
+indo_stance %>% 
+  count(year, stance)  %>% 
+  ggplot(aes(year, n, fill = stance, alpha = stance)) +
+  geom_ribbon(aes(xmin = year, xmax = year, ymin = 0, ymax = n)) +
+  
+  labs(title = "\U001F1EE\U001F1E9 Indonesia on International Discussion",
+       subtitle = "How many times Indonesia had similar stance with the majority vote?",
+       x = NULL, y = "Number of Votes",
+       fill = "Stance", alpha = "Stance"
+       ) +
+  
+  scale_alpha_discrete(range = c(0.3, 0.75)) +
+  scale_fill_manual(values = c("dodgerblue4", "firebrick", "lightyellow")) +
+
+  theme_pander() +
+  theme(legend.position = "top")
+
+ggsave("plot1.png", width = 10)
+```
+
+
+# Plot 2
+
+```{r}
+indo_stance %>% 
+  count(issue, vote, stance) %>%
+  filter(stance != "Majority") %>% 
+  mutate(
+    issue = map_chr(issue, function(x) strwrap(x, width = 20) %>% 
+                      paste(collapse = "\n")
+                    ),
+    vote = str_to_title(vote),
+    stance = factor(stance, levels = c("Abstain", "Minority"))
+         )  %>% 
+  ggplot(aes(axis1 = reorder(issue, -n), axis2 = vote, axis3 = stance, y = n)) +
+  geom_alluvium(width = 0.2, aes(fill = vote) ) +
+  geom_stratum(color = "#1D2024", width = 0.3) +
+  geom_text(stat = "stratum", size = 2.5,
+            aes(label = after_stat(stratum))
+            ) +
+  
+  labs(title = "Issues Where Indonesia Has Different Stance from the Majority",
+       subtitle = "Indonesia mostly has minority vote or being abstain in human right issues",
+       y = NULL) +
+  
+  scale_fill_manual(values = c("dodgerblue", "firebrick4", "darkgreen")) +
+   
+  theme_pander() +
+  theme(axis.text = element_blank(),
+        legend.position = "none")
+
+ggsave("plot2.png", width = 10)
+```
+
+
+
+
