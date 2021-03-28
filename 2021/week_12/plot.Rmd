@@ -1,0 +1,145 @@
+---
+title: "Week 12"
+author: "Arga"
+date: "3/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Library
+
+```{r message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(scico)
+library(scales)
+library(ggrepel)
+library(ggtext)
+library(glue)
+library(magick)
+```
+
+# Data
+
+```{r message=FALSE}
+games <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-16/games.csv')
+
+head(games)
+```
+
+```{r}
+df_elder <- games %>% 
+  filter(gamename %>% str_detect("Elder")) %>% 
+  mutate(date = ymd( paste(year, month, "28", sep = "-")),
+         gamename = case_when(gamename %>% str_detect("Online") ~ glue("<b style='color:#D0C252'>{gamename}</b>"),
+                              gamename %>% str_detect("Legend") ~ glue("<b style='color:#2D5AAA'>{gamename}</b>"),
+                              TRUE ~ gamename
+                              ),
+         gamename = factor(gamename, levels = unique(gamename))
+         )
+
+highlight1 <- df_elder %>% 
+  filter(gamename %>% str_detect("Online"),
+         year == 2016) %>% 
+  filter(gain == max(gain)) 
+
+highlight2 <- df_elder %>% 
+  filter(gamename %>% str_detect("Online"),
+         year == 2020, month == "January")
+
+highlight3 <- df_elder %>% 
+  filter(gamename %>% str_detect("Online"),
+         year == 2019) %>% 
+  filter(gain == max(gain)) 
+```
+
+
+```{r}
+set.seed(123)
+p1 <- df_elder %>% 
+  ggplot(aes(date, avg)) +
+  geom_point(alpha = 0.25, aes(color = gamename)) +
+  geom_line(aes(color = gamename), 
+            size = 0.75) +
+  geom_ribbon(aes(xmin = date, xmax = date, ymin = 0, ymax = avg, fill = gamename), 
+              alpha = 0.5, show.legend = F) +
+  geom_text_repel(data = highlight1, aes(label = "Free Play Weekend\non Steam"),
+                  color = "white", hjust = 0, 
+                  nudge_x = -750, nudge_y = 2000) +
+  geom_text_repel(data = highlight3, aes(label = "Elsweyr Update and 5 Year of ESO\nCelebration Event"),
+                  color = "white", hjust = 0, 
+                  nudge_x = -1000, nudge_y = 3000) +
+  geom_text(data = highlight2, aes(label = "First COVID-19 case\n found in U.S."),
+            color = "white", 
+            hjust = 1, 
+            nudge_x = -25, nudge_y = 1e4) +
+  geom_vline(data = highlight2, aes(xintercept = date), lty = "dashed", color = "white" ) +
+
+  labs(subtitle = "<b>The Elder Scrolls</b> is one of the most successful game franchise developed by Bethesda Studios.  
+       <br> <b style='color:#D0C252'> The Elder Scrolls Online</b> has a surge in active player after the pandemic hit and force people to stay at home.
+       <br> However, <b style='color:#2D5AAA'>The Elder Scrolls: Legends </b> continue to lose players despite being a mobile game.",
+       color = NULL,
+       x = NULL, y = "Average Number of Player",
+       caption = "@Argaadya"
+       ) +
+  
+  scale_y_continuous(breaks = seq(0, 3*1e4, 5000),
+                     labels = number_format(big.mark = ",")) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_color_scico_d(palette = "roma", begin = 0.3, end = 0.9) +
+  scale_fill_scico_d(palette = "roma", begin = 0.3, end = 0.9) +
+  
+  theme(legend.position = c(0.10, 0.75),
+        plot.subtitle = element_markdown(hjust = 0.5),
+        legend.text = element_markdown(),
+        text = element_text(color = "white"),
+        axis.text = element_text(color = "white"),
+        axis.text.y = element_markdown(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#1D2024" , colour = "transparent"),
+        legend.background = element_rect(fill = "#1D2024" , colour = "transparent"),
+        legend.key = element_rect(fill = "#1D2024" , colour = "transparent"),
+        plot.background = element_rect(fill = "#1D2024", color = "transparent")
+        )
+
+p1
+```
+
+# Insert Image with Magick
+
+
+
+
+```{r}
+p_magick <- image_graph(width = 3960, height = 1980, res = 300)
+p1
+dev.off()
+```
+
+
+```{r}
+logo <- image_read("image.png")
+
+# adjust image size
+logo <- image_scale(logo, geometry = geometry_size_percent(width = 20,height = 20))
+```
+
+```{r}
+p_magick1 <- image_composite(p_magick, composite_image = logo, 
+                             offset = geometry_point(x = 100, y =  50))  
+
+p_magick2 <- image_composite(p_magick1, composite_image = logo, 
+                             offset = geometry_point(x = 3700, y =  50))  
+
+```
+### Save Image
+
+```{r}
+image_write(p_magick2, "plot1.png")
+
+```
+
+

@@ -59,8 +59,11 @@ indo_stance <- df_complete %>%
                                TRUE ~ "Minority") %>% 
            factor(levels = c("Majority", "Minority", "Abstain"))
          
-         ) 
+         )
+```
 
+
+```{r}
 indo_stance %>% 
   count(year, stance)  %>% 
   ggplot(aes(year, n, fill = stance, alpha = stance)) +
