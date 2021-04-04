@@ -1,0 +1,75 @@
+---
+title: "Ternary Plot for Makeup Shades"
+author: "Arga"
+date: "4/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r message=FALSE}
+library(tidyverse)
+library(scales)
+library(ggtext)
+library(ggtern)
+library(magick)
+```
+
+# Data
+
+```{r message=FALSE}
+allShades <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-30/allShades.csv')
+```
+
+
+Create function to scale the data into range of 0-1 with min-max normalization.
+
+```{r}
+min_max <- function(x){
+  (x - min(x)) / (max(x)-min(x))
+}
+```
+
+# Visualization
+
+```{r}
+prep_shade <- allShades %>% 
+  mutate_at(vars(hue, sat, lightness), min_max) %>% 
+  mutate(hex = factor(hex)) 
+
+p1 <- prep_shade %>% 
+  ggtern(aes(hue, sat, lightness,
+             color = hex)) +
+  geom_point(alpha = 0.6) +
+  scale_color_identity() +
+  guides(color = F) +
+  labs(x = "Hue",
+       y = "Saturation",
+       z = "Lightness",
+       title = "Color Distribution",
+       subtitle = "Make Up Shades from Various Brands"
+       ) +
+  ggthemes::theme_pander() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.text = element_text(family = "mono")
+        )
+```
+
+# Plot to Magick
+
+```{r}
+p_magick <- image_graph(width = 1980, height = 1980, res = 300)
+p1
+dev.off()
+```
+
+# Save Image
+
+```{r}
+image_write(p_magick, "plot1.png")
+```
