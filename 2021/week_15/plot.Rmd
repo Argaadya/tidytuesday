@@ -1,0 +1,203 @@
+---
+title: "Deforesation"
+author: "Arga"
+date: "4/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library and Setup
+
+```{r message=FALSE}
+library(tidyverse)
+library(scales)
+library(leaflet)
+library(sf)
+library(ggthemes)
+library(gganimate)
+library(showtext)
+library(magick)
+```
+
+# Data
+
+```{r message=FALSE}
+forest <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest.csv')
+forest_area <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest_area.csv')
+```
+
+## Map Data
+
+```{r}
+world_map <- st_read("Igismap/")
+```
+
+## Missing Value Imputation
+
+To prevent the country map for disappearing
+
+```{r}
+dummy_data <- crossing(year = unique(forest$year), code = unique(world_map$iso3)) %>% 
+  left_join(forest %>% distinct(entity, code)) 
+
+forest_impute <- dummy_data %>% 
+  left_join(forest %>% select(-code), by = c("year", "entity")) %>% 
+  distinct()  
+
+
+forest_join <- world_map %>% 
+  left_join(forest_impute, by = c("iso3" = "code")) %>% 
+  st_as_sf()
+  
+```
+
+
+# Set Showtext
+
+```{r}
+font_add_google("Special Elite", "special_elite")
+font_add_google("Open Sans", "open_sans")
+font_add_google("Saira", "saira")
+
+showtext_auto()
+```
+
+# Visualization
+
+## Static Plot
+
+```{r}
+p1 <- forest_join %>% 
+  filter(year == 2015) %>% 
+  mutate(net_forest_conversion = net_forest_conversion*0.01) %>% 
+  ggplot(aes(fill = net_forest_conversion)) +
+  geom_sf(color = "white", lwd = 0.25) +
+  geom_text(data = data.frame(x = -160, y = -40, label = "No Data"), 
+            aes(x, y, label = label), size = unit(16, "mm"),
+            inherit.aes = F, hjust = 0, family = "open_sans") +
+  geom_rect(aes(xmin = -165, xmax = -175, ymin = -35, ymax = -45), inherit.aes = F, fill = "#CEEAF6") +
+  
+  geom_text(data = data.frame(x = 50, y = -85, 
+                              label = "Data: Our World in Data| Graphics: @Argaadya"), 
+            aes(x, y, label = label), size = unit(10, "mm"),
+            inherit.aes = F, hjust = 0, family = "saira") +
+  
+  scale_fill_binned(type = "gradient", low = "firebrick4", high = "#76E57F", 
+                    na.value = "#CEEAF6",
+                    labels = number_format(big.mark = ",", accuracy = 1)) +
+  
+  labs(fill = NULL,
+       x = NULL,
+       y = NULL,
+       title = "Global Net Forest Conversion in 2015",
+       subtitle = expression(paste("Forest Expansion/Loss in  ", km^2))) +
+  
+  theme_pander() +
+  theme(legend.position = "top",
+        axis.text = element_blank(),
+        plot.title = element_text(family = "special_elite", hjust = 0.5, size = unit(72, "mm")),
+        plot.subtitle = element_text(family = "open_sans", hjust = 0.5, size = unit(48, "mm")),
+        legend.text =  element_text(family = "mono", hjust = 0.5, size = unit(36, "mm")),
+        legend.key.width = unit(20, "mm"),
+        legend.key.height = unit(3, "mm")
+        ) 
+```
+
+
+### Insert Logo
+
+```{r}
+p_magick <- image_graph(width = 3960, height = 1980, res = 300)
+p1
+dev.off()
+```
+
+
+```{r}
+fire <- image_read("fire.png")
+tree <- image_read("tree.png")
+
+# adjust image size
+fire <- image_scale(fire, geometry = geometry_size_percent(width = 5,height = 5))
+tree <- image_scale(tree, geometry = geometry_size_percent(width = 2,height = 2))
+```
+
+```{r}
+p_magick1 <- image_composite(p_magick, composite_image = fire, 
+                             offset = geometry_point(x = 1275, y = 175))  
+
+p_magick2 <- image_composite(p_magick1, composite_image = tree, 
+                             offset = geometry_point(x = 2600, y = 175))  
+
+p_magick2
+```
+
+### Save Image
+
+```{r}
+image_write(p_magick2, "plot1.png")
+```
+
+
+## Animation
+
+```{r}
+forest_viz <- forest_join %>% 
+  mutate(year = factor(year),
+         net_forest_conversion = net_forest_conversion*0.01)
+```
+
+
+```{r}
+p1 <-  forest_viz %>% 
+  # filter(entity == "Indonesia") %>% 
+  ggplot(aes(fill = net_forest_conversion)) +
+  geom_sf(color = "white", lwd = 0.25) +
+  geom_text(data = forest_viz %>% filter(entity == "Indonesia"), aes(-150, -50, label = year, family = "mono"), size = 8) +
+  geom_text(data = data.frame(x = -160, y = -10, label = "No Data"), 
+            aes(x, y, label = label), 
+            inherit.aes = F, hjust = 0, family = "open_sans") +
+  geom_rect(aes(xmin = -165, xmax = -175, ymin = -5, ymax = -15), inherit.aes = F, fill = "#CEEAF6") +
+  
+  scale_fill_binned(type = "gradient", low = "firebrick4", high = "#76E57F", 
+                    na.value = "#CEEAF6",
+                    labels = number_format(big.mark = ",", accuracy = 1)) +
+  
+  labs(fill = NULL,
+       x = NULL,
+       y = NULL,
+       title = "Global Net Forest Conversion",
+       subtitle = expression(paste("Forest Expansion/Loss in  ", km^2))) +
+  
+  theme_pander() +
+  theme(legend.position = "top",
+        axis.text = element_blank(),
+        plot.title = element_text(family = "special_elite", hjust = 0.5),
+        plot.subtitle = element_text(family = "open_sans", hjust = 0.5),
+        legend.text = element_text(family = "mono"),
+        legend.key.width = unit(20, "mm"),
+        legend.key.height = unit(3, "mm")
+        ) 
+
+p1
+```
+
+Add animation
+
+```{r}
+wc_map <- p1 +
+  transition_states(states = year) +
+  ease_aes("back-in-out")
+
+animate(wc_map, height = 500, width = 800)
+```
+
+Save animation
+
+```{r}
+anim_save("global_anim.gif")
+```
+
