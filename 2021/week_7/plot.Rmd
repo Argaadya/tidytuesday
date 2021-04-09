@@ -54,7 +54,7 @@ Inspiration: https://github.com/ajstarks/dubois-data-portraits/blob/master/chall
 ```{r}
 p1 <- furniture %>% 
   ggplot(aes(x = value, y = Year, fill = factor(Year))) +
-  geom_rect(aes(xmin =0, xmax = value, ymin = Year, ymax = Year + 3)) +
+  geom_rect(aes(xmin =0, xmax = value, ymin = Year, ymax = Year + 3), alpha = 0.5) +
   geom_text(aes(x = 0, y = Year + 2,  label = paste(Year, "----", dollar(value), "  '")), 
             hjust = 1, size = 15, color = "grey30", family = "rajdhani") +
   scale_x_continuous(limits = c(0, max(furniture$value) + 7*1e5)) +
