@@ -12,22 +12,32 @@ knitr::opts_chunk$set(echo = TRUE)
 # Library and Setup
 
 ```{r message=FALSE}
+# Data wrangling
 library(tidyverse)
+
+# Visualization
 library(scales)
-library(leaflet)
-library(sf)
+
 library(ggthemes)
-library(gganimate)
-library(showtext)
+library(gganimate) # animation
+library(showtext) # font
+
+# Data spatial
+library(sf)
+
+# Input Image
 library(magick)
 ```
 
 # Data
 
+Data from tidytuesday
+
 ```{r message=FALSE}
 forest <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest.csv')
 forest_area <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-06/forest_area.csv')
 ```
+
 
 ## Map Data
 
@@ -47,17 +57,16 @@ forest_impute <- dummy_data %>%
   left_join(forest %>% select(-code), by = c("year", "entity")) %>% 
   distinct()  
 
-
 forest_join <- world_map %>% 
   left_join(forest_impute, by = c("iso3" = "code")) %>% 
   st_as_sf()
-  
 ```
 
 
 # Set Showtext
 
 ```{r}
+# Download font from google
 font_add_google("Special Elite", "special_elite")
 font_add_google("Open Sans", "open_sans")
 font_add_google("Saira", "saira")
@@ -74,7 +83,9 @@ p1 <- forest_join %>%
   filter(year == 2015) %>% 
   mutate(net_forest_conversion = net_forest_conversion*0.01) %>% 
   ggplot(aes(fill = net_forest_conversion)) +
-  geom_sf(color = "white", lwd = 0.25) +
+  
+  geom_sf(color = "white", lwd = 0.25) + # world map
+  
   geom_text(data = data.frame(x = -160, y = -40, label = "No Data"), 
             aes(x, y, label = label), size = unit(16, "mm"),
             inherit.aes = F, hjust = 0, family = "open_sans") +
@@ -87,7 +98,8 @@ p1 <- forest_join %>%
   
   scale_fill_binned(type = "gradient", low = "firebrick4", high = "#76E57F", 
                     na.value = "#CEEAF6",
-                    labels = number_format(big.mark = ",", accuracy = 1)) +
+                    labels = number_format(big.mark = ",", accuracy = 1)
+                    ) +
   
   labs(fill = NULL,
        x = NULL,
@@ -105,7 +117,6 @@ p1 <- forest_join %>%
         legend.key.height = unit(3, "mm")
         ) 
 ```
-
 
 ### Insert Logo
 

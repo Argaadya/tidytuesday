@@ -1,0 +1,96 @@
+---
+title: "Untitled"
+author: "Arga"
+date: "4/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r message=FALSE}
+# Data Wrangling
+library(tidyverse)
+library(scales)
+
+# Processing Image
+library(magick)
+
+# Font
+library(showtext)
+```
+
+# Data
+
+Data acquired from https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-02-16/readme.md
+
+```{r message=FALSE}
+furniture <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-02-16/furniture.csv') %>% 
+  rename(value = 2)
+
+furniture
+```
+
+
+# Prepare Font
+
+Use font from https://fonts.google.com/
+
+```{r}
+showtext_auto()
+
+font_add_google("Public Sans", "public_sans")
+font_add_google("Rajdhani", "rajdhani")
+```
+
+
+# Visualization
+
+Inspiration: https://github.com/ajstarks/dubois-data-portraits/blob/master/challenge/challenge07/original-plate-25.jpg
+
+```{r}
+p1 <- furniture %>% 
+  ggplot(aes(x = value, y = Year, fill = factor(Year))) +
+  geom_rect(aes(xmin =0, xmax = value, ymin = Year, ymax = Year + 3)) +
+  geom_text(aes(x = 0, y = Year + 2,  label = paste(Year, "----", dollar(value), "  '")), 
+            hjust = 1, size = 15, color = "grey30", family = "rajdhani") +
+  scale_x_continuous(limits = c(0, max(furniture$value) + 7*1e5)) +
+  scale_fill_manual(values = c("#E0ADA8", "#A2A5B1", "#BE9A81", "#F0B349", "#DFC2A2", "#D73F40")) +
+  labs(title = "ASSESSED VALUE OF HOUSEHOLD AND KITCHEN FURNITURE\nOWNED BY GEORGIA BLACK MAN",
+       caption = "Inspired by Dubois-style visualization\nGraphic: @Argaadya") +
+  coord_polar() +
+  theme_void() +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5, family = "public_sans", size = 60, lineheight = unit(0.3, "mm")),
+        plot.caption = element_text(family = "public_sans", size = 36, hjust = 0.5, lineheight = unit(0.5, "mm"))
+        ) 
+```
+
+Convert image into an image
+
+```{r}
+p_magick <- image_graph(width = 1940, height = 2560, res = 300, bg = "transparent")
+p1
+dev.off()
+```
+
+Add paper texture as the background of the image
+
+```{r}
+back_img <- image_read("paper_texture.png")
+
+back_img <- image_scale(back_img, geometry = geometry_size_percent(400, 400))
+
+p2 <- image_composite(back_img, p_magick, 
+                offset = geometry_point(0,0))
+```
+
+Save plot
+
+```{r}
+image_write(p2, "plot1.png")
+```
+
