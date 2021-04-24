@@ -1,0 +1,119 @@
+---
+title: "Netflix Plot"
+author: "Arga"
+date: "4/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library and Setup
+
+```{r message=FALSE}
+library(igraph)
+library(ggraph)
+library(tidyverse)
+library(tidygraph)
+
+library(magick)
+```
+
+# Data
+
+```{r message=FALSE}
+netflix_titles <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-04-20/netflix_titles.csv')
+
+head(netflix_titles, 10)
+```
+
+# Graph Data
+
+Create connection between actors
+
+```{r }
+netflix_long <- netflix_titles %>% 
+  separate_rows(cast, sep = ", ") %>% 
+  select(title, cast) 
+
+netflix_nest <- netflix_long %>% 
+  select(title, cast) %>% 
+  nest(cast) 
+
+netflix_graph <- netflix_nest$data %>% 
+  map_df(function(x) crossing(from = x$cast, to = x$cast) %>% 
+  filter(from != to) ) %>% 
+  count(from, to, name = "freq") %>% 
+  arrange(desc(freq))
+```
+
+
+Create graph data and consider only connection with frequency > 7 to reduce the graph network.
+
+```{r}
+df_graph <- netflix_graph %>% 
+  filter(freq > 7) %>% 
+  graph_from_data_frame(directed = F) %>% 
+  as_tbl_graph() %>% 
+  activate(edges) %>% 
+  distinct()
+
+df_graph
+```
+
+# Graph Visualization
+
+```{r}
+set.seed(100)
+p1 <- df_graph %>% 
+  activate(nodes) %>% 
+  mutate(name = str_replace_all(name, " ", "\n")) %>% 
+  activate(edges) %>% 
+  ggraph(layout = "kk") +
+  geom_edge_link(aes(color = freq), alpha = 0.5) +
+  geom_node_label(aes(label = name), size = 2, alpha = 0.6, color = "white", fill = "black" ) +
+  labs(subtitle = paste0("\n \n \n \nOut of ", n_distinct(netflix_titles$title), " titles in Netflix, there are at least ", 
+                         n_distinct(netflix_graph %>% filter(freq > 7) %>% pull(from)), " casts\nwho have played together on more than 7 series\n"
+                         ),
+       caption = "@Argaadya  \n"
+       ) +
+  scale_edge_color_gradient(low = "orange", high = "firebrick4", name = "Frequency", ) +
+  theme_void() +
+  theme(plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(family = "mono"),
+        legend.position = "top",
+        legend.key.width = unit(15, "mm"),
+        legend.text = element_text(family = "mono"))
+```
+
+# Image
+
+## Convert ggplot to image
+
+```{r}
+p_magick <- image_graph(width = 2160, height = 2160, res = 300)
+p1
+dev.off()
+```
+
+## Insert Netflix Logo
+
+```{r}
+logo <- image_read("Netflix_logo_n.png")
+
+logo <- image_scale(logo, geometry = geometry_size_percent(width = 2.5,height = 2.5))
+```
+
+## Insert Logo to Image
+
+```{r}
+p_final <- image_composite(p_magick, composite_image = logo, 
+                           offset = geometry_point(x = 1080, y = 50)) 
+```
+
+## Save Image
+
+```{r}
+image_write(p_final, "plot1.png")
+```
