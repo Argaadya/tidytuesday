@@ -1,0 +1,27 @@
+---
+title: "Birth Bath"
+author: "Arga Adyatama"
+date: "9/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r message=FALSE}
+library(tidyverse)
+library(scales)
+```
+
+# Data
+
+```{r}
+bird_baths <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-08-31/bird_baths.csv')
+
+head(bird_baths)
+```
+
+

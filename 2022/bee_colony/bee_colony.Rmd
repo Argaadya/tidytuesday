@@ -1,0 +1,214 @@
+---
+title: "Bee Colonies Loss"
+author: "Arga Adyatama"
+date: "1/16/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r}
+library(tidyverse)
+library(scales)
+library(emojifont)  
+options(scipen = 999)
+```
+
+# Data
+
+```{r}
+colony <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-01-11/colony.csv')
+```
+
+# Data Wrangling
+
+## Convert months into quarter categories
+
+```{r}
+df_colony <- colony %>% 
+  mutate(quarter = case_when(months %>% str_detect("January") ~ "Q1",
+                             months %>% str_detect("April") ~ "Q2",
+                             months %>% str_detect("Jul") ~ "Q3",
+                             T ~ "Q4"
+                             ) %>% 
+           factor(levels = c("Q1", "Q2", "Q3", "Q4"))
+         ) %>% 
+  arrange(year, quarter) 
+```
+
+## Aggregate data to year and quarter
+
+```{r}
+df_agg <- df_colony %>% 
+  group_by(year, quarter) %>% 
+  summarise(colony_lost = sum(colony_lost, na.rm = T),
+            colony_added = sum(colony_added, na.rm = T),
+            colony_reno = sum(colony_reno, na.rm = T),
+            .groups = "drop"
+            ) %>% 
+  mutate_if(is.numeric, function(x) ifelse(is.na(x), 0, x)) %>% 
+  mutate(year_quarter = paste(year, quarter),
+         year_quarter = year_quarter %>% factor(levels = year_quarter)
+         )
+
+df_long <- df_agg %>% 
+  select(year:colony_added, year_quarter) %>% 
+  pivot_longer(cols = c(colony_lost, colony_added), names_to = "type", values_to = "value")
+```
+
+## Prepare data for visualization
+
+```{r}
+multiplier <- 1e5
+
+df_nest <- df_long %>% 
+  mutate(value_2 = round(value/multiplier)*multiplier,
+         dummy_type = type
+         ) %>% 
+  nest(-c(year_quarter, dummy_type))
+
+df_viz <- map_df(df_nest$data,
+       function(x) {
+         df_prop <- x
+         
+         if (x$value_2 != 0) {
+           
+          for (i in 1:(x$value_2/multiplier - 1)) {
+            df_prop <- df_prop %>% 
+              bind_rows(x)
+            
+          }
+           
+         }
+         
+         df_prop <- df_prop %>% 
+             mutate(pos_y = 1:nrow(.)) 
+         return(df_prop)
+         }
+       )
+```
+
+
+```{r}
+df_viz_2 <- df_viz %>% 
+  select(-c(value)) %>% 
+  bind_rows(data.frame(year = rep(2021, 4),
+                       value_2 = 0,
+                       quarter = c("Q3", "Q3", "Q4", "Q4"),
+                       type = c("colony_lost", "colony_added", "colony_lost", "colony_added"),
+                       pos_y = 1
+                       )
+            ) %>% 
+  mutate(year_quarter = paste(year, quarter),
+         year_quarter = year_quarter %>% factor(levels = levels(df_agg$year_quarter)),
+         value_y = pos_y * multiplier,
+         quarter_type = paste(quarter, type),
+         icon_label = case_when(value_2 == 0 ~ "",
+                                type == "colony_lost" & !is.na(year_quarter)  ~ fontawesome("fa-bug"), 
+                                type == "colony_added" & !is.na(year_quarter)  ~fontawesome("fa-home"),
+                                T ~ ""
+                                )
+         )
+```
+
+## Extra labels and legend for the plot
+
+```{r}
+label_x_viz <- df_viz_2 %>% 
+  distinct(quarter, year, quarter_type) %>% 
+  mutate(label_x = ifelse(quarter_type %>% str_detect("add"), "", as.character(quarter))) %>% 
+  pull(label_x)
+
+legend_1 <- data.frame(year = 2015, 
+                       quarter = "Q1",
+                       type = "colony_added",
+                       value_y = 1.7*1e6,
+                       label = fontawesome("fa-home")) %>% 
+  mutate(year_quarter = paste(year, quarter),
+         quarter_type = paste(quarter, type)
+         )
+
+legend_1_text <- data.frame(year = 2015, 
+                       quarter = "Q2",
+                       type = "colony_added",
+                       value_y = 1.7*1e6,
+                       label = "   Colony Added") %>% 
+  mutate(year_quarter = paste(year, quarter),
+         quarter_type = paste(quarter, type)
+         )
+
+legend_2 <- data.frame(year = 2015, 
+                       quarter = "Q1",
+                       type = "colony_added",
+                       value_y = 1.6*1e6,
+                       label = fontawesome("fa-bug")) %>% 
+  mutate(year_quarter = paste(year, quarter),
+         quarter_type = paste(quarter, type)
+         )
+
+legend_2_text <- data.frame(year = 2015, 
+                       quarter = "Q2",
+                       type = "colony_added",
+                       value_y = 1.6*1e6,
+                       label = "   Colony Lost") %>% 
+  mutate(year_quarter = paste(year, quarter),
+         quarter_type = paste(quarter, type)
+         )
+```
+
+
+# Visualization
+
+```{r}
+df_viz_2 %>% 
+  select(-c(value_2, pos_y)) %>% 
+  ggplot(aes(quarter_type, value_y, color = type)) +
+  geom_text(aes(label = icon_label), family='fontawesome-webfont', size = 16) +
+  geom_text(data = legend_1,
+            aes(label = label), 
+            family='fontawesome-webfont', size = 16
+            ) +
+  geom_text(data = legend_1_text,
+            aes(label = label), size = 12
+            ) +
+    geom_text(data = legend_2, aes(label = label), 
+              family='fontawesome-webfont', size = 16, color = "dodgerblue"
+              ) +
+  geom_text(data = legend_2_text, aes(label = label), size = 12, color = "dodgerblue"
+            ) +
+  facet_wrap(facets = ~year, 
+             strip.position = "bottom", 
+             scales = "free_x",
+             nrow = 1) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        strip.placement = "outside",
+        strip.background = element_rect(fill = "#F4F4F4", color = "transparent"),
+        panel.grid = element_blank(),
+        axis.text = element_text(size = 32),
+        axis.title = element_text(size = 48),
+        strip.text = element_text(size = 36),
+        plot.title = element_text(size = 64),
+        plot.subtitle = element_text(size = 36, lineheight = 0.5),
+        plot.caption = element_text(size = 36)
+        ) +
+  scale_y_continuous(breaks = seq(0, 1e7, 2*1e5),
+                     labels = number_format(big.mark = ","),
+                     limits = c(NA, 1.7*1e6)
+                     ) +
+  scale_x_discrete(labels = label_x_viz) +
+  scale_color_manual(values = c("#347A4A", "dodgerblue")) +
+  labs(x = NULL,
+       y = "Number of Colonies",
+       title = "Changes in USA Bee Colonies",
+       subtitle = "The effort to add more colonies are often done on the first 2 quarters of the year to compensate the lost of colonies from Q3 and Q4 of last year",
+       caption = "@Argaadya | Data Source: USDA"
+       )
+
+ggsave("trial1.png", width = 18, height = 9, bg = "white")
+```
+
