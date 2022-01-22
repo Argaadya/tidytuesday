@@ -194,8 +194,8 @@ df_map %>%
   guides(fill = guide_legend(title.position = "top", label.position = "bottom")) +
   labs(fill = "Number of Choclate Variant",
        title = "Chocolate Bars Around the World",
-       subtitle = "The history of chocolate began in Mesoamerica, with fermented beverages made from chocolate date back to 450 BC (<i>Wikipedia</i>). 
-       <br> Nowadays, data from <b> flavorsofcacao.com </b> reveals that most of chocolate bars come from South America, espescially <b>Venezuela, Peru, and Ecuador</b>. 
+       subtitle = "The history of chocolate began in Mesoamerica, with fermented beverages made from chocolate dating back to 450 BC (<i>Wikipedia</i>). 
+       <br> Nowadays, data from <b> flavorsofcacao.com </b> reveals that most of chocolate bars come from South America, especially <b>Venezuela, Peru, and Ecuador</b>. 
        <br> The network shows where the chocolate goes from their origin country to the chocolate company location. Most of the chocolate goes to <b> North America </b> and <b>EU</b>."
        ) +
   theme_void() +
