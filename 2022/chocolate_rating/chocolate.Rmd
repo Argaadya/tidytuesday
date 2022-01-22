@@ -1,0 +1,215 @@
+---
+title: "Chocolate World Route"
+author: "Arga Adyatama"
+date: "1/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r}
+library(tidyverse)
+library(sf)
+library(ggtext)
+library(scales)
+library(gridExtra)
+```
+
+# Data
+
+Read data and clean the country name to match with country name from `Igismap` (to draw the world border).
+
+```{r}
+chocolate <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-01-18/chocolate.csv',
+                             show_col_types = F
+                             )
+
+chocolate <- chocolate %>% 
+  mutate_at(vars(company_location, country_of_bean_origin),
+            function(x) case_when(x == "U.S.A." ~ "United States",
+                                  x == "Vietnam" ~ "Viet Nam",
+                                  x == "U.K." ~ "United Kingdom",
+                                  x == "Scotland" ~ "United Kingdom",
+                                  x == "Wales" ~ "United Kingdom",
+                                  x == "U.A.E." ~ "United Arab Emirates",
+                                  x == "South Korea" ~ "Korea, Republic of",
+                                  x %>% str_detect("Sao Tome") ~ "Sao Tome and Principe",
+                                  x == "Principe" ~ "Sao Tome and Principe",
+                                  x == "Amsterdam" ~ "Netherlands",
+                                  x == "St. Lucia" ~ "Saint Lucia",
+                                  x == "St.Vincent-Grenadines" ~ "Saint Vincent and the Grenadines",
+                                  x == "Tanzania" ~ "United Republic of Tanzania",
+                                  x == "Trinidad" ~ "Trinidad and Tobago",
+                                  x == "Ivory Coast" ~ "Cote d'Ivoire",
+                                  x == "Tobago" ~ "Trinidad and Tobago",
+                                  x == "Sumatra" ~ "Indonesia",
+                                  x == "Sulawesi" ~ "Indonesia",
+                                  x == "DR Congo" ~ "Democratic Republic of the Congo",
+                                  T ~ x
+                                  )
+            )
+```
+
+Read world border data
+
+```{r}
+world_map <- st_read("Igismap/")
+```
+
+# Data Wrangling
+
+Create network data by calculating the frequency of each country connection
+
+```{r}
+df_connection <- chocolate %>% 
+  group_by(company_location, country_of_bean_origin) %>% 
+  summarise(mean_rating = mean(rating),
+            freq = n(),
+            .groups = "drop"
+            ) %>% 
+  arrange(desc(freq))
+
+head(df_connection)
+```
+
+Create centroid or the center of each country to as the point to draw the network.
+
+```{r}
+centroid_country <- world_map %>% 
+  as.data.frame() %>% 
+  group_by(name) %>% 
+  summarise(lon = mean(lon),
+            lat = mean(lat),
+            .groups = "drop"
+            ) 
+
+centroid_country
+```
+
+Create point coordinate of country origin and country destination. Exclude connection where country origin = country destination
+
+```{r}
+df_connection <- df_connection %>% 
+  left_join(centroid_country,
+            by = c("company_location" = "name")
+            ) %>% 
+  rename(lon_x = lon,
+         lat_x = lat) %>% 
+  left_join(centroid_country,
+            by = c("country_of_bean_origin" = "name")
+            ) %>% 
+  rename(lon_y = lon,
+         lat_y = lat) %>% 
+  filter(country_of_bean_origin != "Blend") %>% 
+  group_by_at(vars(company_location, country_of_bean_origin, lon_x:lat_y)) %>% 
+  summarise(freq = sum(freq),
+            .groups = "drop"
+            )
+
+df_route <- df_connection %>% 
+  filter(company_location != country_of_bean_origin)
+```
+
+```{r}
+df_origin <- df_connection %>% 
+  group_by(country_of_bean_origin) %>% 
+  summarise(freq = sum(freq)) %>% 
+  arrange(desc(freq))
+
+df_map <- world_map %>% 
+  left_join(df_origin, by = c("name" = "country_of_bean_origin")) %>% 
+  st_as_sf()
+```
+
+Get top 5 country origin and country destination
+
+```{r}
+top_origin <- chocolate %>% 
+  group_by(country_of_bean_origin) %>% 
+  summarise(Variant = n()) %>% 
+  arrange(desc(Variant)) %>% 
+  head(5) %>% 
+  rename(Country = country_of_bean_origin)
+
+top_destination <- chocolate %>% 
+  group_by(company_location) %>% 
+  summarise(Variant = n()) %>% 
+  arrange(desc(Variant)) %>% 
+  head(5) 
+
+top_destination
+```
+
+Create boxplot of rating from top 5 country origin
+
+```{r}
+p_box <- chocolate %>% 
+  filter(country_of_bean_origin %in% top_origin$Country) %>% 
+  mutate(country_of_bean_origin = factor(country_of_bean_origin, levels = rev(top_origin$Country))) %>% 
+  ggplot(aes(rating, country_of_bean_origin)) +
+  geom_boxplot(fill = "#E7D5AC") +
+  theme_minimal() +
+  labs(y = NULL,
+       x = "Rating",
+       title = "Chocolate Rating Distribution",
+       subtitle = "On Top 5 Country of Origin"
+       ) +
+  theme(panel.grid = element_blank(),
+        axis.text.y = element_text(colour = "black"),
+        legend.position = "none",
+        axis.title.x = element_text(hjust = 0),
+        plot.subtitle = element_text(size = 9),
+        plot.title = element_text(size = 12)
+        )
+
+p_box
+```
+
+Create the map
+
+```{r}
+df_map %>% 
+  mutate(log_freq = log10(freq+1)) %>% 
+  ggplot() +
+  geom_sf(aes(fill = freq), 
+          color = "#F5F5F5", lty = "dashed", lwd = 0.25
+          ) +
+  geom_hline(aes(yintercept = 0), 
+             color = "#D1DBAA", alpha = 0.5, size = 2.5) +
+  geom_curve(data = df_route,
+             aes(x = lon_x, y = lat_x, xend = lon_y, yend = lat_y, alpha = freq),
+             size = 0.35, color = "dodgerblue4",
+             inherit.aes = F,
+             show.legend = F
+             ) +
+  annotate("text", x = 160, y = -87, label = "@Argaadya") +
+  annotation_custom(ggplotGrob(p_box),
+                    xmin = -195, xmax = -100, ymin = -75, ymax = -17.5
+                    ) +
+  scale_fill_binned(low = "#E7D5AC", high = "#836763", na.value = "#C7DCDA") +
+  guides(fill = guide_legend(title.position = "top", label.position = "bottom")) +
+  labs(fill = "Number of Choclate Variant",
+       title = "Chocolate Bars Around the World",
+       subtitle = "The history of chocolate began in Mesoamerica, with fermented beverages made from chocolate date back to 450 BC (<i>Wikipedia</i>). 
+       <br> Nowadays, data from <b> flavorsofcacao.com </b> reveals that most of chocolate bars come from South America, espescially <b>Venezuela, Peru, and Ecuador</b>. 
+       <br> The network shows where the chocolate goes from their origin country to the chocolate company location. Most of the chocolate goes to <b> North America </b> and <b>EU</b>."
+       ) +
+  theme_void() +
+  theme(legend.position = c(0.89, 0.215),
+        legend.direction = "horizontal",
+        legend.title = element_text(size = 10, hjust = 1),
+        legend.key.width = unit(10, "mm"),
+        legend.key.height = unit(2.5, "mm"),
+        
+        plot.title = element_text(hjust = 0.5, size = 16),
+        plot.subtitle = element_markdown(hjust = 0.5, size = 12, lineheight = 1.5)
+        )
+
+ggsave("chocolate_route.png", width = 16, height = 9, bg = "white")
+```
+
+
